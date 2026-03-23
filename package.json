@@ -1,0 +1,48 @@
+{
+  "name": "ytdl",
+  "version": "1.0.0",
+  "description": "A local UI for yt-dlp",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:x64": "electron-builder --win nsis --x64",
+    "build:ia32": "electron-builder --win nsis --ia32",
+    "build:universal": "electron-builder --win nsis --x64 --ia32",
+    "portable:x64": "electron-builder --win portable --x64",
+    "portable:ia32": "electron-builder --win portable --ia32",
+    "portable:universal": "electron-builder --win portable --x64 --ia32"
+  },
+  "author": "Ditom Baroi Antu",
+  "license": "ISC",
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "axios": "^1.6.8"
+  },
+  "devDependencies": {
+    "electron": "^41.0.3",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.ditom.ytdl.app",
+    "productName": "YTDL",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}-${arch}.${ext}"
+    }
+  }
+}

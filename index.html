@@ -1,0 +1,361 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>YTDL</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.ytimg.com https://*.youtube.com data:;" />
+    <style>
+      /* --- SECTION: THEME VARIABLES --- */
+      :root {
+        --bg-color: #050505;
+        --surface: rgba(25, 25, 25, 0.6);
+        --surface-hover: rgba(40, 40, 40, 0.8);
+        --border-color: rgba(255, 255, 255, 0.05);
+        --accent: #ff0033;
+        --accent-glow: 0 0 20px rgba(255, 0, 51, 0.4);
+        --text-main: #ffffff;
+        --text-muted: #888888;
+        --header-bg: rgba(10, 10, 10, 0.4);
+        --footer-bg: #0a0a0a;
+        --input-bg: rgba(0, 0, 0, 0.3);
+        --dropdown-bg: #111111;
+        --btn-secondary-border: #333333;
+        --thumb-bg: #000000;
+      }
+
+      body.light-mode {
+        --bg-color: #f3f4f6;
+        --surface: rgba(255, 255, 255, 0.9);
+        --surface-hover: rgba(230, 235, 240, 0.9);
+        --border-color: #cccccc;
+        --text-main: #111827;
+        --text-muted: #4b5563;
+        --header-bg: rgba(255, 255, 255, 0.8);
+        --footer-bg: #e5e7eb;
+        --input-bg: #ffffff;
+        --dropdown-bg: #ffffff;
+        --btn-secondary-border: #9ca3af;
+        --thumb-bg: #e5e7eb;
+      }
+
+      body.light-mode input, body.light-mode select { color: #000; }
+
+      /* --- SECTION: KEYFRAMES --- */
+      @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(15px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      
+      @keyframes pulseGlow {
+        0% { box-shadow: 0 0 15px rgba(255, 0, 51, 0.3); }
+        50% { box-shadow: 0 0 25px rgba(255, 0, 51, 0.6); }
+        100% { box-shadow: 0 0 15px rgba(255, 0, 51, 0.3); }
+      }
+      
+      @keyframes appStartup {
+        0% { opacity: 0; transform: translateY(30px) scale(0.97); filter: blur(4px); }
+        100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+      }
+
+      /* --- SECTION: GLOBAL STYLES --- */
+      * { box-sizing: border-box; margin: 0; padding: 0; transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; font-family: "Segoe UI", system-ui, sans-serif; }
+
+      body {
+        background-color: var(--bg-color); color: var(--text-main);
+        height: 100vh; width: 100vw; display: flex; overflow: hidden;
+        background-image: radial-gradient(circle at 50% 0%, rgba(255, 0, 51, 0.1) 0%, transparent 50%);
+      }
+
+      /* --- SECTION: SIDEBAR NAVIGATION --- */
+      #sidebar {
+        width: clamp(60px, 5vw, 70px); background: var(--surface); backdrop-filter: blur(10px);
+        border-right: 1px solid var(--border-color); display: flex; flex-direction: column; align-items: center; padding: 20px 0; gap: 20px; z-index: 10;
+      }
+
+      .nav-btn {
+        width: clamp(35px, 3.5vw, 45px); height: clamp(35px, 3.5vw, 45px); border-radius: 12px; background: transparent; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-muted);
+      }
+      .nav-btn:hover { background: var(--surface-hover); color: var(--text-main); }
+      .nav-btn.active { background: rgba(255, 0, 51, 0.1); color: var(--accent); border: 1px solid rgba(255, 0, 51, 0.3); }
+      .nav-btn svg { width: 50%; height: 50%; fill: currentColor; }
+
+      /* --- SECTION: MAIN LAYOUT & HEADER --- */
+      #main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; animation: appStartup 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;}
+
+      header {
+        height: clamp(40px, 6vh, 60px); display: flex; align-items: center; justify-content: space-between; padding: 0 30px;
+        border-bottom: 1px solid var(--border-color); background: var(--header-bg); backdrop-filter: blur(5px); flex-shrink: 0;
+      }
+      header h2 { font-size: clamp(0.9rem, 1.5vh, 1.1rem); font-weight: 600; letter-spacing: 0.5px; }
+
+      #themeToggleBtn { width: 35px; height: 35px; }
+
+      /* --- SECTION: FOOTER --- */
+      footer {
+        height: clamp(25px, 4vh, 35px); background: var(--footer-bg); border-top: 1px solid var(--border-color);
+        display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: clamp(0.65rem, 1vh, 0.75rem); color: var(--text-muted); flex-shrink: 0;
+      }
+      .status-indicator { display: flex; align-items: center; gap: 8px; }
+      .dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 8px var(--accent); }
+
+      /* --- SECTION: VIEW CONTAINERS & CARDS --- */
+      .view { flex: 1; overflow: hidden; display: none; padding: clamp(10px, 3vh, 30px); justify-content: center; align-items: center; }
+      .view.active { display: flex; flex-direction: column; animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+      .card {
+        width: 100%; max-width: 800px; max-height: 100%;
+        background: var(--surface); backdrop-filter: blur(15px); border: 1px solid var(--border-color); border-radius: 20px;
+        padding: clamp(15px, 3vh, 30px); display: flex; flex-direction: column; gap: clamp(8px, 1.5vh, 20px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2); overflow: hidden;
+      }
+
+      h1, #urlInput, #analyzeBtn, #downloadSection, #status, #openFolderBtn { flex-shrink: 0; }
+      h1 { font-size: clamp(1.1rem, 2.5vh, 1.4rem); text-align: center; }
+
+      #thumbnail {
+        width: 100%; height: 220px; max-height: 35vh; object-fit: cover; border-radius: 12px; display: none; background: var(--thumb-bg); flex-shrink: 1;
+      }
+
+      /* --- SECTION: FORM ELEMENTS & INPUTS --- */
+      input, select {
+        width: 100%; padding: clamp(8px, 1.5vh, 15px); border-radius: 10px; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-main); font-size: clamp(0.85rem, 1.5vh, 0.95rem); outline: none;
+      }
+      input:focus, select:focus { border-color: var(--accent); box-shadow: var(--accent-glow); }
+      select option, select optgroup { background-color: var(--dropdown-bg); color: var(--text-main); }
+
+      button.primary {
+        width: 100%; padding: clamp(8px, 1.5vh, 15px); border-radius: 10px; border: none; background: var(--accent); color: white; font-weight: bold; font-size: clamp(0.9rem, 1.5vh, 1rem); cursor: pointer; box-shadow: var(--accent-glow);
+        transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, box-shadow 0.2s;
+      }
+      button.primary:hover { transform: translateY(-3px) scale(1.02); }
+      button.primary:active { transform: translateY(1px) scale(0.98); }
+      button.primary:disabled { background: #444; color: #888; cursor: not-allowed; box-shadow: none; transform: none; }
+
+      button.secondary {
+        background: transparent; color: var(--text-muted); border: 1px solid var(--btn-secondary-border); padding: clamp(6px, 1vh, 10px); border-radius: 8px; cursor: pointer; width: 100%; font-size: clamp(0.8rem, 1.2vh, 0.9rem);
+      }
+      button.secondary:hover { border-color: var(--text-main); color: var(--text-main); background: var(--surface-hover); }
+
+      #status { text-align: center; color: var(--text-muted); font-size: clamp(0.75rem, 1.2vh, 0.85rem); font-style: italic; }
+      
+      /* --- SECTION: PROGRESS BAR --- */
+      progress { width: 100%; height: 8px; border-radius: 4px; accent-color: var(--accent); display: none; }
+      progress.downloading { animation: pulseGlow 2s infinite; }
+
+      /* --- SECTION: ADVANCED TAB STYLES --- */
+      .adv-card { overflow-y: auto; padding-right: 15px; } 
+      .adv-card::-webkit-scrollbar { width: 8px; }
+      .adv-card::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+      .adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-top: 10px; }
+      .adv-panel { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+      body.light-mode .adv-panel { background: rgba(255, 255, 255, 0.5); }
+      .adv-panel h3 { font-size: 0.9rem; color: var(--accent); margin-bottom: 5px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+      .adv-panel label { font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; cursor: pointer; }
+      .adv-panel input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+      #progressBar, #advProgressBar, .action-row { flex-shrink: 0 !important; }
+      .adv-tab-container { display: flex; gap: 10px; margin-bottom: 15px; flex-shrink: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+      .adv-tab { flex: 1; padding: 8px; background: transparent; color: var(--text-muted); border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+      .adv-tab.active { background: rgba(255, 0, 51, 0.1); color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div id="bootScreen" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:var(--bg-color); z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; transition: opacity 0.5s ease; padding: 40px;">
+      <div class="dot" style="width:20px; height:20px; margin-bottom:25px; animation: pulseGlow 1.5s infinite; background: var(--accent); border-radius: 50%;"></div>
+
+      <h2 id="bootText" style="color:var(--text-main); font-size:1.1rem; margin-bottom: 10px;">Initializing Engine...</h2>
+
+      <div id="bootProgressWrapper" style="width: 100%; max-width: 350px; background: rgba(255,255,255,0.05); height: 6px; border-radius: 10px; overflow: hidden; margin-bottom: 15px; display: none;">
+        <div id="bootProgressBar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s ease;"></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+        <p id="bootSubText" style="color:var(--text-muted); font-size:0.85rem;">Checking core dependencies</p>
+        <p id="bootSpeedText" style="color:var(--accent); font-size:0.8rem; font-weight: bold;"></p>
+      </div>
+    </div>
+
+    <nav id="sidebar">
+      <button class="nav-btn active" data-target="view-home" title="Home">
+        <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" /></svg>
+      </button>
+      <button class="nav-btn" data-target="view-advanced" title="Advanced">
+        <svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+      </button>
+      <button class="nav-btn" data-target="view-library" title="Library">
+        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z" /></svg>
+      </button>
+      <button class="nav-btn" data-target="view-settings" title="Settings" style="margin-top: auto; margin-bottom: 20px">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.49-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
+      </button>
+    </nav>
+
+    <div id="main-area">
+      <header>
+        <h2>YTDL</h2>
+        <button id="themeToggleBtn" class="nav-btn" title="Toggle Theme">
+          <svg id="themeIcon" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+        </button>
+      </header>
+
+      <section id="view-home" class="view active">
+        <div class="card">
+          <h1 id="videoTitle">Paste a link to begin</h1>
+          <img id="thumbnail" alt="Preview" />
+          <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=..." />
+          <button id="analyzeBtn" class="primary">Analyze Video</button>
+
+          <div id="downloadSection" style="display: none; flex-direction: column; gap: 15px" class="action-row">
+            <div style="display: flex; gap: 10px">
+              <select id="qualitySelect" style="flex: 2"></select>
+              <button id="downloadBtn" class="primary" style="flex: 1">Download</button>
+              <button id="stopNormalBtn" class="secondary" style="display: none; flex: 1; border-color: #ff4444; color: #ff4444;">Stop</button>
+            </div>
+            <progress id="progressBar" value="0" max="100"></progress>
+          </div>
+          <div id="status">Engine Ready</div>
+          <button id="openFolderBtn" class="secondary">Open Download Folder</button>
+        </div>
+      </section>
+
+      <section id="view-advanced" class="view">
+        <div class="card adv-card">
+          <h1 style="flex-shrink: 0">Advanced Engine</h1>
+          <input type="text" id="advUrlInput" placeholder="Paste link here..." style="flex-shrink: 0; margin-bottom: 10px;" />
+          <button id="advAnalyzeBtn" class="primary" style="margin-bottom: 15px">Analyze Video</button>
+
+          <div id="advConfigSection" style="display: none; flex-direction: column">
+            
+            <div id="advMetaHeader" style="display: none; align-items: center; gap: 15px; margin-bottom: 15px; background: var(--input-bg); padding: 12px; border-radius: 12px; border: 1px solid var(--border-color);">
+              <img id="advThumbnail" style="width: 120px; height: 68px; object-fit: cover; border-radius: 8px; background: #000;" />
+              <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <h3 id="advVideoTitle" style="font-size: 0.95rem; color: var(--text-main); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Target Locked</h3>
+                <span style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Advanced Options Unlocked</span>
+              </div>
+            </div>
+
+            <div class="adv-tab-container">
+              <button id="tabVideoMode" class="adv-tab active">Video Extraction</button>
+              <button id="tabAudioMode" class="adv-tab">Audio Only Extraction</button>
+            </div>
+
+            <div class="adv-grid">
+              <div class="adv-panel" id="advVideoPanel">
+                <h3>Video Rules</h3>
+                <label>Maximum Resolution</label>
+                <select id="advMaxRes"></select>
+                <label>Frame Rate Limit</label>
+                <select id="advFps"></select>
+                <label>Container Format</label>
+                <select id="advContainer">
+                  <option value="mp4">MP4</option>
+                  <option value="mkv">MKV</option>
+                  <option value="webm">WebM</option>
+                </select>
+                <label>Audio Bitrate Limit</label>
+                <select id="advVideoAudioBitrate">
+                  <option value="">Best Available</option>
+                  <option value="320">Max 320 kbps</option>
+                  <option value="256">Max 256 kbps</option>
+                  <option value="192">Max 192 kbps</option>
+                  <option value="128">Max 128 kbps</option>
+                </select>
+              </div>
+
+              <div class="adv-panel" id="advAudioPanel" style="display: none">
+                <h3>Audio Rules</h3>
+                <label>Target Format</label>
+                <select id="advAudioFormat">
+                  <option value="mp3">MP3</option>
+                  <option value="m4a">M4A</option>
+                  <option value="wav">WAV (Lossless)</option>
+                </select>
+                <label>Bitrate Ceiling</label>
+                <select id="advAudioBitrate">
+                  <option value="">Best Available</option>
+                  <option value="320">Max 320 kbps</option>
+                  <option value="256">Max 256 kbps</option>
+                  <option value="192">Max 192 kbps</option>
+                  <option value="128">Max 128 kbps</option>
+                </select>
+              </div>
+
+              <div class="adv-panel">
+                <h3>Metadata Injection</h3>
+                <label id="advSubsLabel"><input type="checkbox" id="advSubs" /> Embed Subtitles</label>
+                <label><input type="checkbox" id="advThumb" /> Embed Thumbnail</label>
+                <label><input type="checkbox" id="advMeta" /> Write Info JSON</label>
+              </div>
+            </div>
+
+            <div class="action-row" style="display: flex; gap: 10px; margin-top: 15px">
+              <button id="advDownloadBtn" class="primary" style="flex: 2">Download</button>
+              <button id="advStopBtn" class="secondary" style="display: none; flex: 1; border-color: #ff4444; color: #ff4444;">Stop</button>
+            </div>
+            
+            <progress id="advProgressBar" value="0" max="100" style="margin-top: 12px;"></progress>
+          </div>
+          
+          <div id="advStatus" style="text-align: center; width: 100%; margin-top: 10px;">Advanced Engine Ready</div>
+          
+          <button id="advOpenFolderBtn" class="secondary" style="margin-top: 10px;">Open Download Folder</button>
+        </div>
+      </section>
+
+      <section id="view-library" class="view">
+        <div class="card adv-card">
+          <h1 style="flex-shrink: 0;">Download Library</h1>
+          <div id="libraryContainer" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+          </div>
+          <button id="refreshLibraryBtn" class="secondary" style="margin-top: 15px; flex-shrink: 0;">Refresh Library</button>
+        </div>
+      </section>
+
+      <section id="view-settings" class="view">
+        <div class="card adv-card">
+          <h1 style="flex-shrink: 0;">Preferences</h1>
+          
+          <div class="adv-panel" style="margin-top: 15px;">
+            <h3>Download Location</h3>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <input type="text" id="downloadPathInput" readonly style="flex: 2; color: var(--text-muted); cursor: not-allowed;" />
+              <button id="changeFolderBtn" class="primary" style="flex: 1;">Change Folder</button>
+            </div>
+          </div>
+
+          <div class="adv-panel" style="margin-top: 15px;">
+            <h3>Default Presets</h3>
+            <label>Preferred Video Quality</label>
+            <select id="settingDefaultVideo">
+              <option value="">Best Available</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+              <option value="360">360p</option>
+            </select>
+            <label>Preferred Audio Format</label>
+            <select id="settingDefaultAudio">
+              <option value="mp3">MP3</option>
+              <option value="m4a">M4A</option>
+              <option value="wav">WAV</option>
+            </select>
+          </div>
+
+          <div class="adv-panel" style="margin-top: 15px;">
+            <h3>Engine Configuration</h3>
+            <label>Bandwidth Speed Limit (MB/s)</label>
+            <input type="number" id="settingSpeedLimit" placeholder="Leave blank for unlimited speed" min="1" step="0.1" />
+          </div>
+
+        </div>
+      </section>
+
+      <footer>
+        <div class="status-indicator"><div class="dot"></div>Engine: yt-dlp Core</div>
+        <div>v1.0.0 | Built by Ditom</div>
+      </footer>
+    </div>
+    
+    <script src="renderer.js"></script>
+  </body>
+</html>
