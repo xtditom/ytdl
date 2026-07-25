@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <title>YTDL</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.ytimg.com https://*.youtube.com data:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.ytimg.com https://*.youtube.com data:; frame-src https://www.youtube.com https://www.youtube-nocookie.com;" />
     <style>
       /* --- SECTION: THEME VARIABLES --- */
       :root {
@@ -101,6 +101,11 @@
       /* --- SECTION: VIEW CONTAINERS & CARDS --- */
       .view { flex: 1; overflow: hidden; display: none; padding: clamp(10px, 3vh, 30px); justify-content: center; align-items: center; }
       .view.active { display: flex; flex-direction: column; animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      .view.page-view { justify-content: flex-start; align-items: stretch; overflow-y: auto; padding: 25px 35px; }
+      .view.page-view::-webkit-scrollbar { width: 8px; }
+      .view.page-view::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+
+      .page-container { width: 100%; max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 
       .card {
         width: 100%; max-width: 800px; max-height: 100%;
@@ -136,11 +141,15 @@
       }
       button.secondary:hover { border-color: var(--text-main); color: var(--text-main); background: var(--surface-hover); }
 
-      #status { text-align: center; color: var(--text-muted); font-size: clamp(0.75rem, 1.2vh, 0.85rem); font-style: italic; }
+      #status, #advStatus { text-align: center; color: var(--text-muted); font-size: clamp(0.75rem, 1.2vh, 0.85rem); font-style: italic; }
+
       
       /* --- SECTION: PROGRESS BAR --- */
       progress { width: 100%; height: 8px; border-radius: 4px; accent-color: var(--accent); display: none; }
       progress.downloading { animation: pulseGlow 2s infinite; }
+      body.light-mode progress { accent-color: #2ecc71; }
+      body.light-mode progress::-webkit-progress-value { background-color: #2ecc71; }
+      body.light-mode progress::-moz-progress-bar { background-color: #2ecc71; }
 
       /* --- SECTION: ADVANCED TAB STYLES --- */
       .adv-card { overflow-y: auto; padding-right: 15px; } 
@@ -149,7 +158,8 @@
       .adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-top: 10px; }
       .adv-panel { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
       body.light-mode .adv-panel { background: rgba(255, 255, 255, 0.5); }
-      .adv-panel h3 { font-size: 0.9rem; color: var(--accent); margin-bottom: 5px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+      .adv-panel h3 { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.4px; color: var(--accent); margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
+
       .adv-panel label { font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; cursor: pointer; }
       .adv-panel input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 
@@ -157,6 +167,234 @@
       .adv-tab-container { display: flex; gap: 10px; margin-bottom: 15px; flex-shrink: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
       .adv-tab { flex: 1; padding: 8px; background: transparent; color: var(--text-muted); border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
       .adv-tab.active { background: rgba(255, 0, 51, 0.1); color: var(--accent); }
+
+      /* --- SECTION: THUMBNAIL PREVIEW BUTTON & MODAL --- */
+      .preview-overlay-btn {
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(8px);
+        color: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        padding: 6px 14px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+        z-index: 5;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      }
+      .preview-overlay-btn:hover {
+        background: var(--accent);
+        border-color: var(--accent);
+        transform: scale(1.05);
+      }
+      .preview-overlay-btn:active {
+        transform: scale(0.96);
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(12px);
+        z-index: 10000;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      .modal-backdrop.active {
+        display: flex;
+        opacity: 1;
+      }
+
+      .modal-card {
+        width: 100%;
+        max-width: 720px;
+        max-height: 90vh;
+        background: var(--surface);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--border-color);
+        background: var(--header-bg);
+      }
+      .modal-header h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-main);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding-right: 15px;
+      }
+      .modal-close-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.4rem;
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, color 0.2s;
+        flex-shrink: 0;
+      }
+      .modal-close-btn:hover {
+        background: rgba(255, 0, 51, 0.2);
+        color: var(--accent);
+      }
+
+      .modal-body {
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .modal-body::-webkit-scrollbar { width: 6px; }
+      .modal-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+
+      .player-container {
+        position: relative;
+        width: 100%;
+        padding-top: 56.25%;
+        background: #000;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+      }
+      .player-container webview, .player-container iframe, .player-container video {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        border: none;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+      }
+      .meta-card {
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      body.light-mode .meta-card { background: rgba(255, 255, 255, 0.6); }
+      .meta-card .meta-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+      .meta-card .meta-value { font-size: 0.9rem; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      .meta-description-box {
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+        max-height: 120px;
+        overflow-y: auto;
+        white-space: pre-line;
+        line-height: 1.4;
+      }
+      /* --- SECTION: CLIPBOARD TOAST BANNER --- */
+      .clipboard-toast {
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        width: 350px;
+        max-width: calc(100vw - 50px);
+        background: var(--surface);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 14px 16px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(255, 0, 51, 0.15);
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      body.light-mode .clipboard-toast {
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15), 0 0 15px rgba(255, 0, 51, 0.1);
+      }
+      @keyframes toastSlideIn {
+        from { transform: translateY(30px) scale(0.95); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
+      }
+      .toast-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .toast-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: var(--text-main);
+      }
+      .toast-close {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.2rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 2px 6px;
+        border-radius: 6px;
+        transition: background 0.2s, color 0.2s;
+      }
+      .toast-close:hover {
+        color: #ff4444;
+        background: rgba(255, 68, 68, 0.1);
+      }
+      .toast-url {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        background: var(--input-bg);
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+      }
+      .toast-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 2px;
+      }
     </style>
   </head>
   <body>
@@ -182,8 +420,14 @@
       <button class="nav-btn" data-target="view-advanced" title="Advanced">
         <svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
       </button>
+      <button class="nav-btn" data-target="view-parallel" title="Parallel Download">
+        <svg viewBox="0 0 24 24"><path d="M4 4h16v2H4zm0 4h16v2H4zm0 4h10v2H4zm0 4h10v2H4zm14-2v-4h-2v4h-3l4 4 4-4h-3z"/></svg>
+      </button>
+      <button class="nav-btn" data-target="view-playlist" title="Playlist & Channel">
+        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
+      </button>
       <button class="nav-btn" data-target="view-library" title="Library">
-        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z" /></svg>
+        <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
       </button>
       <button class="nav-btn" data-target="view-settings" title="Settings" style="margin-top: auto; margin-bottom: 20px">
         <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.49-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
@@ -192,7 +436,7 @@
 
     <div id="main-area">
       <header>
-        <h2>YTDL</h2>
+        <h2><u>Y</u>ou<u>T</u>ube <u>D</u>own<u>L</u>oader</h2>
         <button id="themeToggleBtn" class="nav-btn" title="Toggle Theme">
           <svg id="themeIcon" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
         </button>
@@ -201,7 +445,13 @@
       <section id="view-home" class="view active">
         <div class="card">
           <h1 id="videoTitle">Paste a link to begin</h1>
-          <img id="thumbnail" alt="Preview" />
+          <div id="thumbnailContainer" style="display: none; position: relative; width: 100%; height: 220px; max-height: 35vh; border-radius: 12px; overflow: hidden; flex-shrink: 1; background: var(--thumb-bg);">
+            <img id="thumbnail" alt="Preview" style="width: 100%; height: 100%; object-fit: cover;" />
+            <button id="previewBtn" class="preview-overlay-btn" title="Preview Video & Metadata">
+              <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: currentColor;"><path d="M8 5v14l11-7z"/></svg>
+              <span>Preview</span>
+            </button>
+          </div>
           <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=..." />
           <button id="analyzeBtn" class="primary">Analyze Video</button>
 
@@ -286,6 +536,9 @@
                 <label><input type="checkbox" id="advThumb" /> Embed Thumbnail</label>
                 <label><input type="checkbox" id="advMeta" /> Write Info JSON</label>
               </div>
+
+
+
             </div>
 
             <div class="action-row" style="display: flex; gap: 10px; margin-top: 15px">
@@ -296,58 +549,197 @@
             <progress id="advProgressBar" value="0" max="100" style="margin-top: 12px;"></progress>
           </div>
           
-          <div id="advStatus" style="text-align: center; width: 100%; margin-top: 10px;">Advanced Engine Ready</div>
+          <div id="advStatus">Advanced Engine Ready</div>
+
           
           <button id="advOpenFolderBtn" class="secondary" style="margin-top: 10px;">Open Download Folder</button>
         </div>
       </section>
 
-      <section id="view-library" class="view">
-        <div class="card adv-card">
-          <h1 style="flex-shrink: 0;">Download Library</h1>
-          <div id="libraryContainer" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-          </div>
-          <button id="refreshLibraryBtn" class="secondary" style="margin-top: 15px; flex-shrink: 0;">Refresh Library</button>
-        </div>
-      </section>
-
-      <section id="view-settings" class="view">
-        <div class="card adv-card">
-          <h1 style="flex-shrink: 0;">Preferences</h1>
-          
-          <div class="adv-panel" style="margin-top: 15px;">
-            <h3>Download Location</h3>
-            <div style="display: flex; gap: 10px; align-items: center;">
-              <input type="text" id="downloadPathInput" readonly style="flex: 2; color: var(--text-muted); cursor: not-allowed;" />
-              <button id="changeFolderBtn" class="primary" style="flex: 1;">Change Folder</button>
+      <section id="view-parallel" class="view page-view">
+        <div class="page-container">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+            <h1 style="font-size: 1.4rem; font-weight: 700; text-align: left; margin: 0; border: none; padding: 0;">Parallel Download</h1>
+            <div style="display: flex; gap: 10px;">
+              <button id="parallelRefreshBtn" class="secondary" style="width: auto; padding: 8px 16px;">Refresh</button>
+              <button id="parallelConfigBtn" class="primary" style="width: auto; padding: 8px 16px;">Open Configuration</button>
             </div>
           </div>
 
-          <div class="adv-panel" style="margin-top: 15px;">
-            <h3>Default Presets</h3>
-            <label>Preferred Video Quality</label>
-            <select id="settingDefaultVideo">
-              <option value="">Best Available</option>
-              <option value="1080">1080p</option>
-              <option value="720">720p</option>
-              <option value="480">480p</option>
-              <option value="360">360p</option>
-            </select>
-            <label>Preferred Audio Format</label>
-            <select id="settingDefaultAudio">
-              <option value="mp3">MP3</option>
-              <option value="m4a">M4A</option>
-              <option value="wav">WAV</option>
-            </select>
+          <div class="adv-panel" style="display: flex; flex-direction: column; gap: 12px;">
+            <div id="parallelThumbnailContainer" style="display: none; position: relative; width: 100%; height: 180px; border-radius: 12px; overflow: hidden; background: var(--thumb-bg);">
+              <img id="parallelThumbnail" alt="Preview" style="width: 100%; height: 100%; object-fit: cover;" />
+              <div id="parallelPreviewTitle" style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); color: #fff; padding: 8px 12px; font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+            </div>
+            <input type="text" id="parallelUrlInput" placeholder="Paste video link here..." />
+            <div style="display: flex; gap: 10px;">
+              <button id="parallelAnalyzeBtn" class="secondary" style="flex: 1; padding: 10px;">Analyze</button>
+              <button id="parallelDownloadBtn" class="primary" style="flex: 1; padding: 10px;">Download</button>
+            </div>
+            <div id="parallelStatus" style="text-align: center; color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Parallel Engine Ready</div>
           </div>
 
-          <div class="adv-panel" style="margin-top: 15px;">
+          <div id="parallelListContainer" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+          </div>
+        </div>
+      </section>
+
+      <section id="view-playlist" class="view page-view">
+        <div class="page-container">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+            <h1 style="font-size: 1.4rem; font-weight: 700; text-align: left; margin: 0; border: none; padding: 0;">Playlist & Channel</h1>
+            <button id="playlistResetBtn" class="secondary" style="width: auto; padding: 8px 16px;">Reset</button>
+          </div>
+
+          <div class="adv-panel" style="display: flex; flex-direction: column; gap: 12px;">
+            <input type="text" id="playlistUrlInput" placeholder="Paste YouTube Playlist or Channel link..." />
+            <button id="playlistAnalyzeBtn" class="primary" style="padding: 10px;">Fetch Playlist</button>
+            <div id="playlistStatus" style="text-align: center; color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Playlist Engine Ready</div>
+          </div>
+
+          <!-- Playlist Metadata & Global Controls Panel -->
+          <div id="playlistMetaBanner" style="display: none; flex-direction: column; gap: 12px;" class="adv-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+              <div>
+                <h3 id="playlistTitleText" style="font-size: 1.1rem; color: var(--text-main); margin: 0;">Playlist</h3>
+                <span id="playlistSubText" style="font-size: 0.82rem; color: var(--text-muted);">0 videos available</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button id="playlistSelectAllBtn" class="secondary" style="width: auto; padding: 6px 12px; font-size: 0.8rem;">Select All</button>
+                <button id="playlistDeselectAllBtn" class="secondary" style="width: auto; padding: 6px 12px; font-size: 0.8rem;">Deselect All</button>
+              </div>
+            </div>
+
+            <!-- Global Preset Config Bar -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+              <div>
+                <label style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Mode</label>
+                <select id="playlistModeSelect">
+                  <option value="video">Video Mode</option>
+                  <option value="audio">Audio Mode</option>
+                </select>
+              </div>
+              <div id="playlistVideoFormatCol">
+                <label style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Format</label>
+                <select id="playlistFormatSelect">
+                  <option value="mp4">MP4</option>
+                  <option value="mkv">MKV</option>
+                  <option value="webm">WebM</option>
+                </select>
+              </div>
+              <div id="playlistQualityCol">
+                <label style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Max Resolution</label>
+                <select id="playlistQualitySelect">
+                  <option value="">Best Available</option>
+                  <option value="2160">2160p (4K)</option>
+                  <option value="1440">1440p (QHD)</option>
+                  <option value="1080">1080p (FHD)</option>
+                  <option value="720">720p (HD)</option>
+                  <option value="480">480p</option>
+                  <option value="360">360p</option>
+                </select>
+              </div>
+            </div>
+
+
+          </div>
+
+
+          <!-- Interactive Multi-Select Entry Cards Container -->
+          <div id="playlistItemsContainer" style="display: flex; flex-direction: column; gap: 10px;">
+          </div>
+
+          <!-- Fixed Download Action Button -->
+          <button id="playlistDownloadSelectedBtn" class="primary" style="display: none; padding: 14px; font-size: 1rem; margin-top: 10px;">Download Selected (0 items)</button>
+        </div>
+      </section>
+
+      <section id="view-library" class="view page-view">
+        <div class="page-container">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+            <h1 style="font-size: 1.4rem; font-weight: 700; text-align: left; margin: 0; border: none; padding: 0;">Download Library</h1>
+            <div style="display: flex; gap: 10px;">
+              <button id="refreshLibraryBtn" class="secondary" style="width: auto; padding: 8px 16px;">Refresh Library</button>
+              <button id="libraryOpenFolderBtn" class="primary" style="width: auto; padding: 8px 16px;">Open Download Folder</button>
+            </div>
+          </div>
+          
+          <div id="libraryContainer" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+          </div>
+        </div>
+      </section>
+
+      <section id="view-settings" class="view page-view">
+        <div class="page-container">
+          <h1 style="font-size: 1.4rem; font-weight: 700; text-align: left; margin: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">Preferences</h1>
+          
+          <div class="adv-panel">
+            <h3>Engine Version & Auto-Update</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <div style="font-size: 0.9rem; font-weight: 600; color: var(--text-main);" id="engineVersionText">yt-dlp Core: Loading version...</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;" id="engineUpdateStatus">Status: Ready</div>
+              </div>
+              <button id="checkUpdateBtn" class="primary" style="width: auto; padding: 10px 18px; font-size: 0.85rem; white-space: nowrap; border-radius: 10px;">Check for Updates</button>
+            </div>
+          </div>
+
+          <div class="adv-panel">
+            <h3>Download Location</h3>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <input type="text" id="downloadPathInput" readonly style="flex: 1; color: var(--text-muted); cursor: not-allowed;" />
+              <button id="changeFolderBtn" class="primary" style="width: auto; padding: 10px 20px; white-space: nowrap;">Change Folder</button>
+            </div>
+          </div>
+
+          <div class="adv-panel">
+            <h3>Skip Mode</h3>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-bottom: 8px;">
+              <input type="checkbox" id="settingEnableArchive" style="width: 18px; height: 18px;" />
+              <span style="color: var(--text-main); font-weight: 500;">Skip Existing Downloads (Title Matching)</span>
+            </label>
+            <span style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; display: block;">
+              <strong>Note:</strong> When enabled, downloads will automatically skip if a file matching the video title already exists in your target download folder or archive history. This applies across all download methods (Normal, Advanced, Parallel, Playlist). <em>Off by default so you can re-download videos anytime with any config.</em>
+            </span>
+          </div>
+
+          <div class="adv-panel">
+            <h3>Clipboard Automation</h3>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="settingClipboardAutoDetect" checked style="width: 18px; height: 18px;" />
+              <span style="color: var(--text-main); font-weight: 500;">Enable Automatic Clipboard Link Detection</span>
+            </label>
+            <span style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; margin-top: 2px;">
+              Automatically pops up a toast when a YouTube, Vimeo, or supported media link is copied to your clipboard.
+            </span>
+          </div>
+
+          <div class="adv-panel">
             <h3>Engine Configuration</h3>
             <label>Bandwidth Speed Limit (MB/s)</label>
             <input type="number" id="settingSpeedLimit" placeholder="Leave blank for unlimited speed" min="1" step="0.1" />
           </div>
 
+          <div class="adv-panel">
+            <h3>Cookie Integration</h3>
+            <label>Cookies File (.txt)</label>
+            <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+              <input type="text" id="cookieFilePathInput" readonly placeholder="No cookies.txt loaded" style="flex: 1; min-width: 0; text-overflow: ellipsis; color: var(--text-main); font-size: 0.85rem; padding: 10px 14px; cursor: default;" />
+              <button id="selectCookieFileBtn" class="primary" style="width: auto; flex-shrink: 0; padding: 10px 18px; font-size: 0.85rem; white-space: nowrap; border-radius: 10px;">Browse File</button>
+              <button id="clearCookieFileBtn" style="display: none; flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px; border: 1px solid rgba(255, 68, 68, 0.4); background: rgba(255, 68, 68, 0.1); color: #ff4444; font-size: 1.1rem; cursor: pointer; align-items: center; justify-content: center; transition: background 0.2s;" title="Remove Cookies File">&times;</button>
+            </div>
+            <span style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; line-height: 1.4;">
+              <strong>Note:</strong> This feature is for Age-Restricted, Private, Member-only videos.<br>
+              <strong>Get YouTube cookies by installing a cookie extractor extension in your browser.</strong>
+            </span>
+          </div>
+
+
+
+
+
         </div>
+
       </section>
 
       <footer>
@@ -356,6 +748,133 @@
       </footer>
     </div>
     
+    <!-- PREVIEW & METADATA MODAL -->
+    <div id="previewModal" class="modal-backdrop">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modalVideoTitle">Media Preview</h3>
+          <button id="closePreviewModalBtn" class="modal-close-btn" title="Close Modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="player-container">
+            <webview id="previewWebview" allowpopups style="width: 100%; height: 100%; border: none;"></webview>
+          </div>
+
+          <div class="meta-grid">
+            <div class="meta-card">
+              <span class="meta-label">Channel</span>
+              <span id="metaUploader" class="meta-value">-</span>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Duration</span>
+              <span id="metaDuration" class="meta-value">-</span>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Views</span>
+              <span id="metaViews" class="meta-value">-</span>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Published</span>
+              <span id="metaDate" class="meta-value">-</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end;">
+            <button id="openExternalBtn" class="secondary" style="width: auto; padding: 6px 14px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor;"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+              <span>Watch on YouTube</span>
+            </button>
+          </div>
+
+          <div class="meta-description-box" id="metaDescription">No description available.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PARALLEL DOWNLOAD CONFIGURATION MODAL -->
+    <div id="parallelConfigModal" class="modal-backdrop">
+      <div class="modal-card" style="max-width: 550px;">
+        <div class="modal-header">
+          <h3>Parallel Download Configuration</h3>
+          <button id="closeParallelConfigBtn" class="modal-close-btn" title="Close Modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="adv-panel">
+            <label style="font-weight: bold; color: var(--text-main); margin-bottom: 4px;">Download File Mode</label>
+            <select id="parallelModeSelect">
+              <option value="video">Video Mode</option>
+              <option value="audio">Audio Mode</option>
+            </select>
+          </div>
+
+          <div class="adv-panel" id="parallelVideoOptions">
+            <label style="font-weight: bold; color: var(--text-main); margin-bottom: 4px;">Video Container / Format</label>
+            <select id="parallelVideoFormatSelect">
+              <option value="mp4">MP4</option>
+              <option value="mkv">MKV</option>
+              <option value="webm">WebM</option>
+            </select>
+
+            <label style="font-weight: bold; color: var(--text-main); margin-bottom: 4px; margin-top: 8px;">Quality / Max Resolution</label>
+            <select id="parallelQualitySelect">
+              <option value="">Best Available (No Limit)</option>
+              <option value="2160">2160p (4K)</option>
+              <option value="1440">1440p (QHD)</option>
+              <option value="1080">1080p (FHD)</option>
+              <option value="720">720p (HD)</option>
+              <option value="480">480p</option>
+              <option value="360">360p</option>
+            </select>
+
+            <label style="font-weight: bold; color: var(--text-main); margin-bottom: 4px; margin-top: 8px;">Frame Rate Limit (FPS)</label>
+            <select id="parallelFpsSelect">
+              <option value="">Auto (Best Available)</option>
+              <option value="60">Max 60 FPS</option>
+              <option value="30">Max 30 FPS</option>
+            </select>
+          </div>
+
+          <div class="adv-panel" id="parallelAudioOptions" style="display: none;">
+            <label style="font-weight: bold; color: var(--text-main); margin-bottom: 4px;">Audio Format</label>
+            <select id="parallelAudioFormatSelect">
+              <option value="mp3">MP3</option>
+              <option value="m4a">M4A</option>
+              <option value="wav">WAV (Lossless)</option>
+            </select>
+
+            <label style="font-weight: bold; color: var(--text-main); margin-bottom: 4px; margin-top: 8px;">Audio Quality / Bitrate</label>
+            <select id="parallelAudioBitrateSelect">
+              <option value="">Best Available</option>
+              <option value="320">Max 320 kbps</option>
+              <option value="256">Max 256 kbps</option>
+              <option value="192">Max 192 kbps</option>
+              <option value="128">Max 128 kbps</option>
+            </select>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button id="saveParallelConfigBtn" class="primary">Save Configuration</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLIPBOARD AUTO-DETECT TOAST BANNER -->
+    <div id="clipboardToast" class="clipboard-toast" style="display: none;">
+      <div class="toast-header">
+        <div class="toast-title">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="var(--accent)"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
+          <span id="toastTitleText">Media Link Detected</span>
+        </div>
+        <button id="toastCloseBtn" class="toast-close" title="Dismiss">&times;</button>
+      </div>
+      <div id="toastUrlText" class="toast-url">https://www.youtube.com/watch?v=...</div>
+      <div class="toast-actions">
+        <button id="toastAnalyzeBtn" class="primary" style="padding: 7px 12px; font-size: 0.8rem; flex: 1; border-radius: 8px;">Analyze Now</button>
+        <button id="toastDownloadMp3Btn" class="secondary" style="padding: 7px 12px; font-size: 0.8rem; flex: 1; border-color: var(--accent); color: var(--accent); border-radius: 8px;">Download MP3</button>
+      </div>
+    </div>
+
     <script src="renderer.js"></script>
   </body>
 </html>
